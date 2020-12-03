@@ -81,8 +81,10 @@ func checkPrerequisites() {
 	}
 
 	// Disable binfmt-misc of AppImageLauncher when we are NOT root? Argh!
-	exitIfBinfmtExists("/proc/sys/fs/binfmt_misc/appimage-type1")
-	exitIfBinfmtExists("/proc/sys/fs/binfmt_misc/appimage-type2")
+	if isRoot {
+		exitIfBinfmtExists("/proc/sys/fs/binfmt_misc/appimage-type1")
+		exitIfBinfmtExists("/proc/sys/fs/binfmt_misc/appimage-type2")
+	}
 
 	// Clean pre-existing desktop files and thumbnails
 	// This is useful for debugging

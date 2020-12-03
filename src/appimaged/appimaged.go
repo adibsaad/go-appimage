@@ -52,6 +52,7 @@ var noNetwork = flag.Bool("nn", false, "Disable all networking functionality")
 var ToBeIntegratedOrUnintegrated []string
 
 var thisai AppImage // A reference to myself
+var isRoot bool
 
 var MQTTclient mqtt.Client
 
@@ -77,12 +78,14 @@ var commit string
 var watchedDirectories []string
 
 var home, _ = os.UserHomeDir()
-var candidateDirectories = []string{
+var userCandidateDirectories = []string{
 	xdg.UserDirs.Download,
 	xdg.UserDirs.Desktop,
 	home + "/.local/bin",
 	home + "/bin",
 	home + "/Applications",
+}
+var systemCandidateDirectories = []string{
 	"/opt",
 	"/usr/local/bin",
 }
@@ -126,9 +129,27 @@ func main() {
 	// Always show version
 	fmt.Println(filepath.Base(os.Args[0]), version)
 
-	for _, dir := range candidateDirectories {
+	cmd := exec.Command("id", "-u")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	userId, err := strconv.Atoi(string(output[:len(output)-1]))
+	if err != nil {
+		log.Fatal(err)
+	}
+	isRoot = userId == 0
+
+	for _, dir := range userCandidateDirectories {
 		if helpers.Exists(dir) {
 			watchedDirectories = append(watchedDirectories, dir)
+		}
+	}
+	if isRoot {
+		for _, dir := range systemCandidateDirectories {
+			if helpers.Exists(dir) {
+				watchedDirectories = append(watchedDirectories, dir)
+			}
 		}
 	}
 
@@ -175,7 +196,7 @@ func main() {
 
 	// Disable desktop integration provided by scripts within AppImages
 	// as per https://github.com/AppImage/AppImageSpec/blob/master/draft.md#desktop-integration
-	err := os.Setenv("DESKTOPINTEGRATION", "go-appimaged")
+	err = os.Setenv("DESKTOPINTEGRATION", "go-appimaged")
 	if err != nil {
 		helpers.PrintError("main", err)
 	}
@@ -397,30 +418,38 @@ func watchDirectories() {
 		helpers.PrintError("main", err)
 	}
 
-	for _, dir := range candidateDirectories {
+	for _, dir := range userCandidateDirectories {
 		if helpers.Exists(dir) {
 			watchedDirectories = append(watchedDirectories, dir)
 		}
 	}
 
-	mounts, _ := procfs.GetMounts()
-	// FIXME: This breaks when the partition label has "-", see https://github.com/prometheus/procfs/issues/227
-
-	for _, mount := range mounts {
-		if *verbosePtr == true {
-			log.Println("main: MountPoint", mount.MountPoint)
+	if isRoot {
+		for _, dir := range systemCandidateDirectories {
+			if helpers.Exists(dir) {
+				watchedDirectories = append(watchedDirectories, dir)
+			}
 		}
-		if strings.HasPrefix(mount.MountPoint, "/sys") == false && // Is /dev needed for openSUSE Live?
-			// strings.HasPrefix(mount.MountPoint, "/run") == false && // Manjaro mounts the device on which the Live ISO is in /run, so we cannot exclude that
-			strings.HasPrefix(mount.MountPoint, "/tmp") == false &&
-			strings.HasPrefix(mount.MountPoint, "/proc") == false {
-			fmt.Println(mount.SuperOptions)
-			if helpers.Exists(mount.MountPoint + "/Applications") {
-				if _, ok := mount.SuperOptions["showexec"]; ok {
-					go sendErrorDesktopNotification("UDisks showexec issue", "Applications cannot run from \n"+mount.MountPoint+". \nSee \nhttps://github.com/storaged-project/udisks/issues/707")
-					printUdisksShowexecHint()
-				} else {
-					watchedDirectories = helpers.AppendIfMissing(watchedDirectories, mount.MountPoint+"/Applications")
+
+		mounts, _ := procfs.GetMounts()
+		// FIXME: This breaks when the partition label has "-", see https://github.com/prometheus/procfs/issues/227
+
+		for _, mount := range mounts {
+			if *verbosePtr == true {
+				log.Println("main: MountPoint", mount.MountPoint)
+			}
+			if strings.HasPrefix(mount.MountPoint, "/sys") == false && // Is /dev needed for openSUSE Live?
+				// strings.HasPrefix(mount.MountPoint, "/run") == false && // Manjaro mounts the device on which the Live ISO is in /run, so we cannot exclude that
+				strings.HasPrefix(mount.MountPoint, "/tmp") == false &&
+				strings.HasPrefix(mount.MountPoint, "/proc") == false {
+				fmt.Println(mount.SuperOptions)
+				if helpers.Exists(mount.MountPoint + "/Applications") {
+					if _, ok := mount.SuperOptions["showexec"]; ok {
+						go sendErrorDesktopNotification("UDisks showexec issue", "Applications cannot run from \n"+mount.MountPoint+". \nSee \nhttps://github.com/storaged-project/udisks/issues/707")
+						printUdisksShowexecHint()
+					} else {
+						watchedDirectories = helpers.AppendIfMissing(watchedDirectories, mount.MountPoint+"/Applications")
+					}
 				}
 			}
 		}
