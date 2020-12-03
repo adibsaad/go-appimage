@@ -79,6 +79,9 @@ func browseZeroconfServices() {
 
 // CheckIfConnectedToNetwork returns true if connected to a network
 func CheckIfConnectedToNetwork() bool {
+	if *noNetwork {
+		return false
+	}
 	var interfaces []net.Interface
 	ifaces, err := net.Interfaces()
 	if err != nil {

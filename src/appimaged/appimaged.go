@@ -47,6 +47,7 @@ var cleanPtr = flag.Bool("c", true, "Clean pre-existing desktop files")
 
 var quietPtr = flag.Bool("q", false, "Do not send desktop notifications")
 var noZeroconfPtr = flag.Bool("nz", false, "Do not announce this service on the network using Zeroconf")
+var noNetwork = flag.Bool("nn", false, "Disable all networking functionality")
 
 var ToBeIntegratedOrUnintegrated []string
 
